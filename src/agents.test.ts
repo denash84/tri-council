@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   buildPrompt,
   isCliAvailable,
@@ -92,6 +92,14 @@ describe("spawnAgentWithRetries", () => {
     maxRetries: 3,
   };
 
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("returns on first success without retrying", async () => {
     const mock = vi.fn().mockResolvedValueOnce({
       stdout: "ok",
@@ -123,7 +131,9 @@ describe("spawnAgentWithRetries", () => {
         timedOut: false,
       });
 
-    const result = await spawnAgentWithRetries(baseOptions, mock);
+    const promise = spawnAgentWithRetries(baseOptions, mock);
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await promise;
 
     expect(result.stdout).toBe("success");
     expect(result.attempts).toBe(2);
@@ -146,7 +156,9 @@ describe("spawnAgentWithRetries", () => {
         timedOut: false,
       });
 
-    const result = await spawnAgentWithRetries(baseOptions, mock);
+    const promise = spawnAgentWithRetries(baseOptions, mock);
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await promise;
 
     expect(result.stdout).toBe("recovered");
     expect(result.attempts).toBe(2);
@@ -176,10 +188,12 @@ describe("spawnAgentWithRetries", () => {
       timedOut: true,
     });
 
-    const result = await spawnAgentWithRetries(
+    const promise = spawnAgentWithRetries(
       { ...baseOptions, maxRetries: 2 },
       mock,
     );
+    await vi.advanceTimersByTimeAsync(4000);
+    const result = await promise;
 
     expect(result.timedOut).toBe(true);
     expect(result.attempts).toBe(2);

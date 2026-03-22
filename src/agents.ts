@@ -65,7 +65,8 @@ export async function spawnAgentWithRetries(
       return { ...result, attempts: attempt };
     }
 
-    // Otherwise: timed out or non-zero exit — retry
+    // Otherwise: timed out or non-zero exit — wait then retry
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
   // Unreachable, but TypeScript needs it
