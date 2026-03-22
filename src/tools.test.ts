@@ -10,6 +10,7 @@ vi.mock("node:fs/promises", () => ({
 const testConfig: Config = {
   agents: DEFAULT_AGENTS,
   timeout: 5000,
+  maxRetries: 3,
 };
 
 describe("handleListAgents", () => {
@@ -60,11 +61,12 @@ describe("handleSummon", () => {
 
   it("spawns agent and returns stdout on success", async () => {
     vi.spyOn(agents, "isCliAvailable").mockResolvedValue(true);
-    vi.spyOn(agents, "spawnAgent").mockResolvedValue({
+    vi.spyOn(agents, "spawnAgentWithRetries").mockResolvedValue({
       stdout: "Agent response here",
       stderr: "",
       exitCode: 0,
       timedOut: false,
+      attempts: 1,
     });
     const result = await handleSummon(
       { agent: "Claude", prompt: "review this code" },
@@ -74,13 +76,14 @@ describe("handleSummon", () => {
     expect(result.text).toContain("Agent response here");
   });
 
-  it("includes timeout notice when agent times out", async () => {
+  it("includes timeout notice with attempt count when agent times out", async () => {
     vi.spyOn(agents, "isCliAvailable").mockResolvedValue(true);
-    vi.spyOn(agents, "spawnAgent").mockResolvedValue({
+    vi.spyOn(agents, "spawnAgentWithRetries").mockResolvedValue({
       stdout: "partial output",
       stderr: "",
       exitCode: null,
       timedOut: true,
+      attempts: 3,
     });
     const result = await handleSummon(
       { agent: "Claude", prompt: "slow task" },
@@ -88,15 +91,17 @@ describe("handleSummon", () => {
     );
     expect(result.text).toContain("partial output");
     expect(result.text).toContain("timed out");
+    expect(result.text).toContain("3 attempts");
   });
 
-  it("returns stderr on non-zero exit", async () => {
+  it("returns stderr on non-zero exit with attempt count", async () => {
     vi.spyOn(agents, "isCliAvailable").mockResolvedValue(true);
-    vi.spyOn(agents, "spawnAgent").mockResolvedValue({
+    vi.spyOn(agents, "spawnAgentWithRetries").mockResolvedValue({
       stdout: "",
       stderr: "something went wrong",
       exitCode: 1,
       timedOut: false,
+      attempts: 3,
     });
     const result = await handleSummon(
       { agent: "Codex", prompt: "fail" },
@@ -104,6 +109,23 @@ describe("handleSummon", () => {
     );
     expect(result.isError).toBe(true);
     expect(result.text).toContain("something went wrong");
+    expect(result.text).toContain("after 3 attempts");
+  });
+
+  it("omits attempt count on single-attempt failure", async () => {
+    vi.spyOn(agents, "isCliAvailable").mockResolvedValue(true);
+    vi.spyOn(agents, "spawnAgentWithRetries").mockResolvedValue({
+      stdout: "",
+      stderr: "spawn error",
+      exitCode: null,
+      timedOut: false,
+      attempts: 1,
+    });
+    const result = await handleSummon(
+      { agent: "Claude", prompt: "broken" },
+      testConfig,
+    );
+    expect(result.text).not.toContain("attempts");
   });
 
   it("returns error when a requested file is missing", async () => {

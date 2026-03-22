@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
   isCliAvailable,
-  spawnAgent,
+  spawnAgentWithRetries,
   buildPrompt,
   type FileContext,
 } from "./agents.js";
@@ -89,26 +89,31 @@ export async function handleSummon(
     arg.replaceAll("{prompt}", fullPrompt),
   );
 
-  // Spawn agent
-  const result = await spawnAgent({
+  // Spawn agent with retries
+  const result = await spawnAgentWithRetries({
     command: agentConfig.command,
     args: expandedArgs,
     cwd: cwd ?? process.cwd(),
     timeout: config.timeout,
+    maxRetries: config.maxRetries,
   });
 
   // Handle timeout
   if (result.timedOut) {
     const partial = result.stdout || "(no output captured)";
+    const attemptNote =
+      result.attempts > 1 ? ` (${result.attempts} attempts)` : "";
     return {
-      text: `[${agentName} timed out after ${config.timeout / 1000}s]\n\n${partial}`,
+      text: `[${agentName} timed out after ${config.timeout / 1000}s${attemptNote}]\n\n${partial}`,
     };
   }
 
   // Handle non-zero exit
   if (result.exitCode !== 0) {
+    const attemptNote =
+      result.attempts > 1 ? ` after ${result.attempts} attempts` : "";
     return {
-      text: `${agentName} exited with code ${result.exitCode}:\n${result.stderr || result.stdout}`,
+      text: `${agentName} exited with code ${result.exitCode}${attemptNote}:\n${result.stderr || result.stdout}`,
       isError: true,
     };
   }

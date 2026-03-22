@@ -41,6 +41,37 @@ export async function isCliAvailable(command: string): Promise<boolean> {
   }
 }
 
+export async function spawnAgentWithRetries(
+  options: SpawnOptions & { maxRetries: number },
+  _spawnAgent: (opts: SpawnOptions) => Promise<SpawnResult> = spawnAgent,
+): Promise<SpawnResult & { attempts: number }> {
+  const { maxRetries, ...spawnOptions } = options;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const result = await _spawnAgent(spawnOptions);
+
+    // Don't retry spawn errors (binary not found, etc.)
+    if (result.exitCode === null && !result.timedOut) {
+      return { ...result, attempts: attempt };
+    }
+
+    // Success — no retry needed
+    if (result.exitCode === 0 && !result.timedOut) {
+      return { ...result, attempts: attempt };
+    }
+
+    // Last attempt — return whatever we got
+    if (attempt === maxRetries) {
+      return { ...result, attempts: attempt };
+    }
+
+    // Otherwise: timed out or non-zero exit — retry
+  }
+
+  // Unreachable, but TypeScript needs it
+  throw new Error("Unexpected end of retry loop");
+}
+
 export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
   return new Promise((resolve) => {
     const { command, args, cwd, timeout } = options;

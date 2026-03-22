@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { buildPrompt, isCliAvailable, spawnAgent } from "./agents.js";
+import { describe, it, expect, vi } from "vitest";
+import {
+  buildPrompt,
+  isCliAvailable,
+  spawnAgent,
+  spawnAgentWithRetries,
+} from "./agents.js";
 
 describe("buildPrompt", () => {
   it("returns prompt as-is when no files provided", () => {
@@ -75,5 +80,109 @@ describe("spawnAgent", () => {
     });
     expect(result.timedOut).toBe(true);
     expect(result.stdout).toContain("start");
+  });
+});
+
+describe("spawnAgentWithRetries", () => {
+  const baseOptions = {
+    command: "echo",
+    args: ["hi"],
+    cwd: process.cwd(),
+    timeout: 5000,
+    maxRetries: 3,
+  };
+
+  it("returns on first success without retrying", async () => {
+    const mock = vi.fn().mockResolvedValueOnce({
+      stdout: "ok",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    });
+
+    const result = await spawnAgentWithRetries(baseOptions, mock);
+
+    expect(result.stdout).toBe("ok");
+    expect(result.attempts).toBe(1);
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries on timeout then succeeds", async () => {
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stdout: "partial",
+        stderr: "",
+        exitCode: null,
+        timedOut: true,
+      })
+      .mockResolvedValueOnce({
+        stdout: "success",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+    const result = await spawnAgentWithRetries(baseOptions, mock);
+
+    expect(result.stdout).toBe("success");
+    expect(result.attempts).toBe(2);
+    expect(mock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries on non-zero exit then succeeds", async () => {
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stdout: "",
+        stderr: "error",
+        exitCode: 1,
+        timedOut: false,
+      })
+      .mockResolvedValueOnce({
+        stdout: "recovered",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+    const result = await spawnAgentWithRetries(baseOptions, mock);
+
+    expect(result.stdout).toBe("recovered");
+    expect(result.attempts).toBe(2);
+  });
+
+  it("does not retry on spawn error (binary not found)", async () => {
+    const mock = vi.fn().mockResolvedValueOnce({
+      stdout: "",
+      stderr: "spawn ENOENT",
+      exitCode: null,
+      timedOut: false,
+    });
+
+    const result = await spawnAgentWithRetries(baseOptions, mock);
+
+    expect(result.exitCode).toBeNull();
+    expect(result.timedOut).toBe(false);
+    expect(result.attempts).toBe(1);
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns last result when all retries exhausted", async () => {
+    const mock = vi.fn().mockResolvedValue({
+      stdout: "partial",
+      stderr: "",
+      exitCode: null,
+      timedOut: true,
+    });
+
+    const result = await spawnAgentWithRetries(
+      { ...baseOptions, maxRetries: 2 },
+      mock,
+    );
+
+    expect(result.timedOut).toBe(true);
+    expect(result.attempts).toBe(2);
+    expect(mock).toHaveBeenCalledTimes(2);
   });
 });

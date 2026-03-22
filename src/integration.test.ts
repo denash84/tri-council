@@ -17,6 +17,7 @@ const echoConfig: Config = {
     },
   },
   timeout: 5000,
+  maxRetries: 3,
 };
 
 describe("integration: handleSummon with real subprocess", () => {

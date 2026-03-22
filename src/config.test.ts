@@ -13,7 +13,8 @@ describe("loadConfig", () => {
     vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
     const config = await loadConfig();
     expect(config.agents).toEqual(DEFAULT_AGENTS);
-    expect(config.timeout).toBe(120_000);
+    expect(config.timeout).toBe(300_000);
+    expect(config.maxRetries).toBe(3);
   });
 
   it("merges user config over defaults", async () => {
