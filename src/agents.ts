@@ -51,7 +51,6 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
     const proc = spawn(command, args, {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env },
     });
 
     proc.stdout.on("data", (chunk: Buffer) => {

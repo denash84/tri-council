@@ -86,7 +86,7 @@ export async function handleSummon(
 
   // Expand args template
   const expandedArgs = agentConfig.args.map((arg) =>
-    arg.replace("{prompt}", fullPrompt),
+    arg.replaceAll("{prompt}", fullPrompt),
   );
 
   // Spawn agent
