@@ -20,7 +20,17 @@ export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
     args: ["-p", "{prompt}", "--output-format", "text"],
     role: "architect",
   },
+  "Claude-2": {
+    command: "claude",
+    args: ["-p", "{prompt}", "--output-format", "text"],
+    role: "architect",
+  },
   Codex: {
+    command: "codex",
+    args: ["exec", "{prompt}"],
+    role: "implementer",
+  },
+  "Codex-2": {
     command: "codex",
     args: ["exec", "{prompt}"],
     role: "implementer",
@@ -30,7 +40,17 @@ export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
     args: ["-p", "{prompt}", "-o", "text"],
     role: "skeptic",
   },
+  "Gemini-2": {
+    command: "gemini",
+    args: ["-p", "{prompt}", "-o", "text"],
+    role: "skeptic",
+  },
   Grok: {
+    command: "grok",
+    args: ["-p", "{prompt}"],
+    role: "challenger",
+  },
+  "Grok-2": {
     command: "grok",
     args: ["-p", "{prompt}"],
     role: "challenger",
