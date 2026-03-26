@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import {
   isCliAvailable,
   spawnAgentWithRetries,
@@ -62,9 +63,11 @@ export async function handleSummon(
     const missing: string[] = [];
     const loaded: FileContext[] = [];
 
+    const baseDir = cwd ?? process.cwd();
     for (const filePath of files) {
       try {
-        const content = await readFile(filePath, "utf-8");
+        const resolvedPath = resolve(baseDir, filePath);
+        const content = await readFile(resolvedPath, "utf-8");
         loaded.push({ path: filePath, content });
       } catch {
         missing.push(filePath);
