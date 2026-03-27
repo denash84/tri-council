@@ -20,10 +20,28 @@ interface ToolResult {
   isError?: boolean;
 }
 
+function isValidAgentConfig(agent: unknown): agent is AgentConfig {
+  if (typeof agent !== "object" || agent === null) {
+    return false;
+  }
+
+  const candidate = agent as Record<string, unknown>;
+  return (
+    typeof candidate.command === "string" &&
+    Array.isArray(candidate.args) &&
+    candidate.args.every((arg) => typeof arg === "string") &&
+    typeof candidate.role === "string"
+  );
+}
+
 export async function handleListAgents(config: Config): Promise<string> {
   const entries = Object.entries(config.agents);
   const lines = await Promise.all(
-    entries.map(async ([name, agent]: [string, AgentConfig]) => {
+    entries.map(async ([name, agent]) => {
+      if (!isValidAgentConfig(agent)) {
+        return `- **${name}**: invalid config`;
+      }
+
       const available = await isCliAvailable(agent.command);
       const status = available ? "available" : `not found (${agent.command})`;
       return `- **${name}** (${agent.role}): \`${agent.command}\` — ${status}`;
@@ -44,6 +62,13 @@ export async function handleSummon(
     const available = Object.keys(config.agents).join(", ");
     return {
       text: `Agent '${agentName}' not found. Available agents: ${available}`,
+      isError: true,
+    };
+  }
+
+  if (!isValidAgentConfig(agentConfig)) {
+    return {
+      text: `Agent '${agentName}' has invalid configuration`,
       isError: true,
     };
   }
@@ -108,6 +133,7 @@ export async function handleSummon(
       result.attempts > 1 ? ` (${result.attempts} attempts)` : "";
     return {
       text: `[${agentName} timed out after ${config.timeout / 1000}s${attemptNote}]\n\n${partial}`,
+      isError: true,
     };
   }
 

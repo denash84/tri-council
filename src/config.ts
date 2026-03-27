@@ -30,19 +30,87 @@ export const DEFAULT_AGENTS: Record<string, AgentConfig> = {
     args: ["-p", "{prompt}", "-o", "text"],
     role: "skeptic",
   },
-  Grok: {
-    command: "grok",
-    args: ["-p", "{prompt}"],
-    role: "challenger",
-  },
 };
 
 const DEFAULT_TIMEOUT = 300_000;
 const DEFAULT_MAX_RETRIES = 3;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function cloneAgentConfig(agent: AgentConfig): AgentConfig {
+  return {
+    command: agent.command,
+    args: [...agent.args],
+    role: agent.role,
+  };
+}
+
+function mergeAgentConfig(
+  baseAgent: AgentConfig | undefined,
+  override: unknown,
+): AgentConfig | null {
+  if (!isRecord(override)) {
+    return baseAgent ? cloneAgentConfig(baseAgent) : null;
+  }
+
+  const command =
+    typeof override.command === "string" ? override.command : baseAgent?.command;
+  const args = isStringArray(override.args) ? override.args : baseAgent?.args;
+  const role =
+    typeof override.role === "string" ? override.role : baseAgent?.role;
+
+  if (
+    typeof command !== "string" ||
+    !Array.isArray(args) ||
+    typeof role !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    command,
+    args: [...args],
+    role,
+  };
+}
+
+function mergeAgents(userAgents: unknown): Record<string, AgentConfig> {
+  const merged = Object.fromEntries(
+    Object.entries(DEFAULT_AGENTS).map(([name, agent]) => [
+      name,
+      cloneAgentConfig(agent),
+    ]),
+  ) as Record<string, AgentConfig>;
+
+  if (!isRecord(userAgents)) {
+    return merged;
+  }
+
+  for (const [name, override] of Object.entries(userAgents)) {
+    const mergedAgent = mergeAgentConfig(DEFAULT_AGENTS[name], override);
+    if (mergedAgent) {
+      merged[name] = mergedAgent;
+    }
+  }
+
+  return merged;
+}
+
+function normalizePositiveInt(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : fallback;
+}
+
 export async function loadConfig(): Promise<Config> {
   const defaults: Config = {
-    agents: { ...DEFAULT_AGENTS },
+    agents: mergeAgents(undefined),
     timeout: DEFAULT_TIMEOUT,
     maxRetries: DEFAULT_MAX_RETRIES,
   };
@@ -54,16 +122,9 @@ export async function loadConfig(): Promise<Config> {
     const parsed = JSON.parse(raw);
 
     return {
-      agents: {
-        ...defaults.agents,
-        ...(parsed.agents ?? {}),
-      },
-      timeout:
-        typeof parsed.timeout === "number" ? parsed.timeout : defaults.timeout,
-      maxRetries:
-        typeof parsed.maxRetries === "number"
-          ? parsed.maxRetries
-          : defaults.maxRetries,
+      agents: mergeAgents(parsed.agents),
+      timeout: normalizePositiveInt(parsed.timeout, defaults.timeout),
+      maxRetries: normalizePositiveInt(parsed.maxRetries, defaults.maxRetries),
     };
   } catch {
     return defaults;

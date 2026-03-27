@@ -27,10 +27,10 @@ describe("handleListAgents", () => {
 
   it("marks unavailable agents", async () => {
     vi.spyOn(agents, "isCliAvailable").mockImplementation(async (cmd) => {
-      return cmd !== "grok";
+      return cmd !== "codex";
     });
     const result = await handleListAgents(testConfig);
-    expect(result).toContain("Grok");
+    expect(result).toContain("Codex");
     expect(result).toContain("not found");
   });
 });
@@ -52,7 +52,7 @@ describe("handleSummon", () => {
   it("returns error when CLI not found", async () => {
     vi.spyOn(agents, "isCliAvailable").mockResolvedValue(false);
     const result = await handleSummon(
-      { agent: "Grok", prompt: "hi" },
+      { agent: "Gemini", prompt: "hi" },
       testConfig,
     );
     expect(result.isError).toBe(true);
@@ -92,6 +92,7 @@ describe("handleSummon", () => {
     expect(result.text).toContain("partial output");
     expect(result.text).toContain("timed out");
     expect(result.text).toContain("3 attempts");
+    expect(result.isError).toBe(true);
   });
 
   it("returns stderr on non-zero exit with attempt count", async () => {
@@ -138,5 +139,24 @@ describe("handleSummon", () => {
     );
     expect(result.isError).toBe(true);
     expect(result.text).toContain("missing.ts");
+  });
+
+  it("returns error for invalid agent configuration", async () => {
+    const invalidConfig = {
+      ...testConfig,
+      agents: {
+        Broken: {
+          command: "echo",
+        },
+      },
+    } as unknown as Config;
+
+    const result = await handleSummon(
+      { agent: "Broken", prompt: "hi" },
+      invalidConfig,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("invalid configuration");
   });
 });

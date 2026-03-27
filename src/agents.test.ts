@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { readFile, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildPrompt,
   isCliAvailable,
@@ -80,6 +83,41 @@ describe("spawnAgent", () => {
     });
     expect(result.timedOut).toBe(true);
     expect(result.stdout).toContain("start");
+  });
+
+  it("force-kills a child that ignores SIGTERM", async () => {
+    const pidFile = join(tmpdir(), `tri-council-${Date.now()}-${Math.random()}.pid`);
+    const resultPromise = spawnAgent({
+      command: "node",
+      args: [
+        "-e",
+        `const { writeFileSync } = require('node:fs'); writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000);`,
+      ],
+      cwd: process.cwd(),
+      timeout: 100,
+    });
+
+    const watchdog = setTimeout(async () => {
+      try {
+        const pid = Number(await readFile(pidFile, "utf-8"));
+        if (pid > 0) {
+          process.kill(pid, "SIGKILL");
+        }
+      } catch {
+        // Best-effort cleanup for a failing implementation.
+      }
+    }, 3500);
+
+    const startedAt = Date.now();
+    const result = await resultPromise;
+    const elapsedMs = Date.now() - startedAt;
+
+    clearTimeout(watchdog);
+    await unlink(pidFile).catch(() => undefined);
+
+    expect(result.timedOut).toBe(true);
+    expect(result.stdout).toContain("ready");
+    expect(elapsedMs).toBeLessThan(3300);
   });
 });
 
@@ -198,5 +236,23 @@ describe("spawnAgentWithRetries", () => {
     expect(result.timedOut).toBe(true);
     expect(result.attempts).toBe(2);
     expect(mock).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to one attempt when maxRetries is invalid", async () => {
+    const mock = vi.fn().mockResolvedValueOnce({
+      stdout: "ok",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    });
+
+    const result = await spawnAgentWithRetries(
+      { ...baseOptions, maxRetries: 0 },
+      mock,
+    );
+
+    expect(result.stdout).toBe("ok");
+    expect(result.attempts).toBe(1);
+    expect(mock).toHaveBeenCalledTimes(1);
   });
 });

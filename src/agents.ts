@@ -46,8 +46,10 @@ export async function spawnAgentWithRetries(
   _spawnAgent: (opts: SpawnOptions) => Promise<SpawnResult> = spawnAgent,
 ): Promise<SpawnResult & { attempts: number }> {
   const { maxRetries, ...spawnOptions } = options;
+  const attemptLimit =
+    Number.isInteger(maxRetries) && maxRetries > 0 ? maxRetries : 1;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  for (let attempt = 1; attempt <= attemptLimit; attempt++) {
     const result = await _spawnAgent(spawnOptions);
 
     // Don't retry spawn errors (binary not found, etc.)
@@ -61,7 +63,7 @@ export async function spawnAgentWithRetries(
     }
 
     // Last attempt — return whatever we got
-    if (attempt === maxRetries) {
+    if (attempt === attemptLimit) {
       return { ...result, attempts: attempt };
     }
 
@@ -79,6 +81,18 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let settled = false;
+    let killTimer: NodeJS.Timeout | undefined;
+
+    const settle = (result: SpawnResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (killTimer) {
+        clearTimeout(killTimer);
+      }
+      resolve(result);
+    };
 
     const proc = spawn(command, args, {
       cwd,
@@ -96,19 +110,19 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
     const timer = setTimeout(() => {
       timedOut = true;
       proc.kill("SIGTERM");
-      setTimeout(() => {
-        if (!proc.killed) proc.kill("SIGKILL");
+      killTimer = setTimeout(() => {
+        if (!settled) {
+          proc.kill("SIGKILL");
+        }
       }, 2000);
     }, timeout);
 
     proc.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr, exitCode: code, timedOut });
+      settle({ stdout, stderr, exitCode: code, timedOut });
     });
 
     proc.on("error", (err) => {
-      clearTimeout(timer);
-      resolve({ stdout, stderr: err.message, exitCode: null, timedOut: false });
+      settle({ stdout, stderr: err.message, exitCode: null, timedOut: false });
     });
   });
 }

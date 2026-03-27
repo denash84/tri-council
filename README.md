@@ -1,6 +1,6 @@
 # tri-council
 
-MCP server that summons Claude, Codex, Gemini, and Grok CLIs from any MCP client.
+MCP server that summons Claude, Codex, and Gemini CLIs from any MCP client.
 
 ## Install
 
@@ -25,7 +25,7 @@ Spawn an agent CLI with a prompt and optional file context.
 
 | Parameter | Type     | Required | Description                              |
 | --------- | -------- | -------- | ---------------------------------------- |
-| `agent`   | string   | yes      | Agent name (Claude, Codex, Gemini, Grok) |
+| `agent`   | string   | yes      | Agent name (Claude, Codex, Gemini) |
 | `prompt`  | string   | yes      | The question or task                     |
 | `files`   | string[] | no       | File paths to include as context         |
 | `cwd`     | string   | no       | Working directory for the agent          |
@@ -55,18 +55,13 @@ Optional override at `~/.tri-council/config.json`:
       "command": "gemini",
       "args": ["-p", "{prompt}", "-o", "text"],
       "role": "skeptic"
-    },
-    "Grok": {
-      "command": "grok",
-      "args": ["-p", "{prompt}"],
-      "role": "challenger"
     }
   },
   "timeout": 120000
 }
 ```
 
-Add any CLI agent by adding an entry. The `{prompt}` placeholder is replaced with the assembled prompt (including file context).
+Add any extra CLI agent by adding an entry. The default council is Claude, Codex, and Gemini. The `{prompt}` placeholder is replaced with the assembled prompt (including file context).
 
 ## License
 

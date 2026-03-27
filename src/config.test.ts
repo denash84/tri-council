@@ -13,6 +13,7 @@ describe("loadConfig", () => {
     vi.mocked(readFile).mockRejectedValue(new Error("ENOENT"));
     const config = await loadConfig();
     expect(config.agents).toEqual(DEFAULT_AGENTS);
+    expect(Object.keys(config.agents)).toEqual(["Claude", "Codex", "Gemini"]);
     expect(config.timeout).toBe(300_000);
     expect(config.maxRetries).toBe(3);
   });
@@ -34,6 +35,36 @@ describe("loadConfig", () => {
     expect(config.agents.Gemini.role).toBe("reviewer");
     expect(config.agents.Claude).toEqual(DEFAULT_AGENTS.Claude); // untouched
     expect(config.timeout).toBe(60000);
+  });
+
+  it("keeps default agent fields when user override is partial", async () => {
+    const userConfig = JSON.stringify({
+      agents: {
+        Claude: {
+          command: "custom-claude",
+        },
+      },
+    });
+
+    vi.mocked(readFile).mockResolvedValue(userConfig as any);
+    const config = await loadConfig();
+
+    expect(config.agents.Claude.command).toBe("custom-claude");
+    expect(config.agents.Claude.args).toEqual(DEFAULT_AGENTS.Claude.args);
+    expect(config.agents.Claude.role).toBe(DEFAULT_AGENTS.Claude.role);
+  });
+
+  it("falls back to defaults for invalid timeout and retry values", async () => {
+    const userConfig = JSON.stringify({
+      timeout: 0,
+      maxRetries: -1,
+    });
+
+    vi.mocked(readFile).mockResolvedValue(userConfig as any);
+    const config = await loadConfig();
+
+    expect(config.timeout).toBe(300_000);
+    expect(config.maxRetries).toBe(3);
   });
 
   it("ignores malformed config file and falls back to defaults", async () => {
